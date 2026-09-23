@@ -4,6 +4,26 @@
 검출선을 연결 그래프로 만들어 **파이프라인 후보(기본 5개)** 를 자동으로 뽑은 뒤
 끝의 화살표/점으로 연장·되돌리기 하며 다듬는 Next.js 캔버스 툴.
 
+## 파이프라인 검토 패널 (HAZOP Step 2.2 분류)
+
+오른쪽 패널은 SERiD HAZOP Step 2.2 "Process interpretation & review" 구성을 따른다 (`components/ReviewPanel.tsx`, `lib/hazop.ts`).
+
+| 단계 | 내용 |
+| --- | --- |
+| A Documents | 도면 번호·제목, 이 라인에 쓰인 범례 규칙(유체·보온 코드, 확인 필요), Unit 도면 목록 |
+| B Components | Equipment · Lines · Valves · Fittings · Loops · Interlocks · Relief — 행마다 신뢰도(Conf.)와 상태 |
+| C Connectivity | From → To (장비 노즐 / 오프페이지 커넥터, 커넥터 FROM/TO 로 흐름 방향), 커넥터 상대 도면 해결, 분기 요소 |
+| D Chemicals | 서비스 코드·서비스명 → 후보 화학물질 → 엔지니어 지정 → 참고 물성 |
+| E Conditions | 장비 데이터 블록의 DP/DT, OP/OT(H&MB 미등록 → Ask user) |
+| F Review | 완료 기준 F1–F9, 신뢰도 높은 레코드 일괄 확인, 승인 |
+
+- 계기 태그를 ISA 5.1 로 해석해 **측정 변수 첫 글자 + 번호**로 루프를 묶는다 (TT/TI/TIC 2415 + TCV 2415 → Loop T-2415, Control loop)
+- 인터록: 보팅 로직·셧다운·핸드 스위치 (PSD, HS …), 릴리프: 안전밸브·파열판 (PSV, PVSV, PSE …)
+- 상태: 신뢰도 ≥ 85% Confirm(확인 후보) · 60–84% Review · < 60% Ask user, 검토자가 누르면 Confirmed. `reviews` 로 저장
+- 커넥터 도면 번호는 `drawing.register`(Unit 도면 목록)로 해결, 다른 Unit 도면이면 Gap
+- 화학물질 물성은 문헌 참고값 — SERiD DB(DIPPR)·KOSHA 노출기준으로 확인 전까지 확정값 아님
+- JSON 내보내기: 파이프라인마다 `hazop` (from/to, components, connectivity, chemicals, conditions, checks)
+
 ## 배포 (AWS Amplify, 정적 데모 모드)
 
 `amplify.yml` 이 `NEXT_PUBLIC_STATIC_MODE=1` 로 빌드한다. 이 모드에서는

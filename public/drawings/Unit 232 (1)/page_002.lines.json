@@ -7895,5 +7895,72 @@
    ],
    "source": "llm"
   }
- ]
+ ],
+ "drawing": {
+  "no": "5-232-2.00-4102",
+  "title": "RESIDUE GAS EXCHANGER / REFLUX SUBCOOLER (ISBL)",
+  "unit": "Unit 232",
+  "register": [
+   {
+    "file": "page_001.png",
+    "dwg_no": "5-232-2.00-4101",
+    "title": "COMBINED REBOILER EXCHANGER (ISBL)"
+   },
+   {
+    "file": "page_002.png",
+    "dwg_no": "5-232-2.00-4102",
+    "title": "RESIDUE GAS EXCHANGER / REFLUX SUBCOOLER (ISBL)"
+   },
+   {
+    "file": "page_003.png",
+    "dwg_no": "5-232-2.00-4103",
+    "title": "DRY FEED GAS CHILLER (ISBL)"
+   },
+   {
+    "file": "page_004.png",
+    "dwg_no": "5-232-2.00-4104",
+    "title": "CHILLED FEED GAS K.O DRUM (ISBL)"
+   },
+   {
+    "file": "page_005.png",
+    "dwg_no": "5-232-2.00-4105",
+    "title": "TURBO EXPANDER AND COMPRESSOR (ISBL)"
+   },
+   {
+    "file": "page_006.png",
+    "dwg_no": "5-232-2.00-4106",
+    "title": "DEMETHANISER (ISBL)"
+   },
+   {
+    "file": "page_007.png",
+    "dwg_no": "5-232-2.00-4107",
+    "title": "DEMETHANISER BOTTOM PUMPS (ISBL)"
+   },
+   {
+    "file": "page_008.png",
+    "dwg_no": "5-232-2.00-4108",
+    "title": "DEBUTANISER TRIM REBOILER (ISBL)"
+   },
+   {
+    "file": "page_009.png",
+    "dwg_no": "5-232-2.00-4109",
+    "title": "CONDENSATE STRIPPER (ISBL)"
+   },
+   {
+    "file": "page_010.png",
+    "dwg_no": "5-232-2.00-4110",
+    "title": "CONDENSATE STRIPPER REBOILER (ISBL)"
+   },
+   {
+    "file": "page_011.png",
+    "dwg_no": "5-232-2.00-4111",
+    "title": "METHANOL INJECTION PACKAGE (ISBL)"
+   },
+   {
+    "file": "page_012.png",
+    "dwg_no": "5-232-2.00-4112",
+    "title": "TURBO EXPANDER & RESIDUE GAS COMPRESSOR (L-232-001 & C-232-001) ANCILLARIES (ISBL)"
+   }
+  ]
+ }
 }

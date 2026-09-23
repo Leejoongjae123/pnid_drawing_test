@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DetectParams, Equipment, ImageFolder, Line, LineDoc, LineLabel, PidSymbol, Pipeline, SymbolCategory } from "@/lib/types";
 import { pipelineEquipment, type EquipConnection } from "@/lib/equipment";
 import { clearLocal, hasLocal, imageUrlFor, listImages, loadDoc, saveDoc, STATIC_MODE } from "@/lib/source";
+import { buildReview, endText, type DrawingInfo, type Rec, type Reviews } from "@/lib/hazop";
+import ReviewPanel from "@/components/ReviewPanel";
 import { assignLabels, chemicalInfo, parseLineNumber, type ChemicalInfo } from "@/lib/labels";
 import { CATEGORY_LABEL, pipelineMembers, resolveOwners, type Ownership, type PipeMembers, type Relation } from "@/lib/symbols";
 import { lineLength, newId, ortho, project, round1 } from "@/lib/geometry";
@@ -27,7 +29,15 @@ import {
 
 type Tool = "select" | "new" | "box" | "pan";
 type View = { scale: number; tx: number; ty: number };
-type Doc = { lines: Line[]; pipelines: Pipeline[]; symbols: PidSymbol[]; labels: LineLabel[]; equipment: Equipment[] };
+type Doc = {
+  lines: Line[];
+  pipelines: Pipeline[];
+  symbols: PidSymbol[];
+  labels: LineLabel[];
+  equipment: Equipment[];
+  drawing: DrawingInfo;
+  reviews: Reviews;
+};
 type EndKey = "start" | "end";
 type Drag =
   | { kind: "pan"; sx: number; sy: number; v: View }
@@ -42,7 +52,7 @@ const DEFAULT_PARAMS: DetectParams = { minLen: 40, gap: 8, sensitivity: 8, hough
 const SNAP_PX = 12;
 const HISTORY_MAX = 200;
 const PALETTE = ["#e5484d", "#0091ff", "#30a46c", "#f76b15", "#8e4ec6", "#d6409f", "#12a594", "#ffb224"];
-const EMPTY: Doc = { lines: [], pipelines: [], symbols: [], labels: [], equipment: [] };
+const EMPTY: Doc = { lines: [], pipelines: [], symbols: [], labels: [], equipment: [], drawing: {}, reviews: {} };
 const EQUIP_COLOR = "#0e7490";
 
 const bounds = (pts: Pt[]) => {
@@ -96,6 +106,7 @@ export default function Editor() {
   const [symBusy, setSymBusy] = useState(false);
   const [showSymbols, setShowSymbols] = useState(true);
   const [hoverItem, setHoverItem] = useState<{ kind: "sym" | "label" | "equip"; id: string } | null>(null);
+  const [selRec, setSelRec] = useState<string | null>(null);
   const [selLabel, setSelLabel] = useState<string | null>(null);
   const [showLabels, setShowLabels] = useState(true);
   const [selEquip, setSelEquip] = useState<string | null>(null);
@@ -194,6 +205,8 @@ export default function Editor() {
           symbols: docRef.current.symbols,
           labels: docRef.current.labels,
           equipment: docRef.current.equipment,
+          drawing: docRef.current.drawing,
+          reviews: docRef.current.reviews,
         };
         const g = buildGraph(res.lines, graphOpts);
         const cands = makeCandidates(g, base, sz, candCount, rejected.current);
@@ -237,7 +250,7 @@ export default function Editor() {
         const symbols = saved.symbols ?? [];
         const labels = saved.labels ?? [];
         const equipment = saved.equipment ?? [];
-        setDoc({ lines: saved.lines, pipelines, symbols, labels, equipment });
+        setDoc({ lines: saved.lines, pipelines, symbols, labels, equipment, drawing: saved.drawing ?? {}, reviews: saved.reviews ?? {} });
         setStatus(
           `저장본 불러옴: 선 ${saved.lines.length} · 파이프라인 ${pipelines.length} · 장비 ${equipment.length} · 심볼 ${symbols.length} · 라벨 ${labels.length}`,
         );
@@ -312,7 +325,30 @@ export default function Editor() {
         ...owned.filter((m) => m.symbol.category !== "instrument").map((m) => ({ kind: "component", ...sym(m) })),
         ...owned.filter((m) => m.symbol.category === "instrument").map((m) => ({ kind: "instrument", ...sym(m) })),
       ];
-      return { ...p, children };
+      // HAZOP Step 2.2 분류 (B Components · C Connectivity · D Chemicals · E Conditions · F Review)
+      const rv = buildReview({
+        pipe: p,
+        owned,
+        allSymbols: doc.symbols,
+        shared: [],
+        info,
+        labels: doc.labels.filter((l) => labelOwner.get(l.id) === p.id),
+        eqs: equipOf.get(p.id) ?? [],
+        drawing: doc.drawing,
+        reviews: doc.reviews,
+      });
+      const recs = (arr: Rec[]) => arr.map(({ key, kind, a, b, b2, c, c2, conf, status }) => ({ key, kind, a, b, b2, c, c2, conf, status }));
+      const hazop = {
+        from: rv.ends.from,
+        to: rv.ends.to,
+        directionKnown: rv.ends.directionKnown,
+        components: Object.fromEntries(Object.entries(rv.components).map(([k, v]) => [k, recs(v)])),
+        connectivity: { edge: recs([rv.connectivity.edge])[0], connectors: recs(rv.connectivity.opcs) },
+        chemicals: { serviceCode: rv.chemicals.service.code, service: rv.chemicals.service.service, candidates: rv.chemicals.service.candidates, specified: rv.chemicals.service.specified },
+        conditions: recs(rv.conditions),
+        checks: rv.checks,
+      };
+      return { ...p, children, hazop };
     });
     const symbols = doc.symbols.map((s) => ({ ...s, pipelineId: owner.get(s.id)?.pipeId ?? null, relation: owner.get(s.id)?.relation ?? null }));
     const labels = doc.labels.map((l) => ({ ...l, pipelineId: labelOwner.get(l.id) ?? null }));
@@ -982,8 +1018,41 @@ export default function Editor() {
     return m;
   }, [doc]);
 
+  /** 선택 파이프라인의 HAZOP 2.2 분류 (A–F) */
+  const pipeReview = useMemo(() => {
+    if (!pipe) return null;
+    const labels = doc.labels.filter((l) => labelOwner.get(l.id) === pipe.id);
+    return buildReview({
+      pipe,
+      owned: ownedBy(pipe.id),
+      allSymbols: doc.symbols,
+      shared: [],
+      info: infoOf.get(pipe.id)!,
+      labels,
+      eqs: equipOf.get(pipe.id) ?? [],
+      drawing: doc.drawing,
+      reviews: doc.reviews,
+    });
+  }, [pipe, doc.labels, doc.symbols, doc.drawing, doc.reviews, labelOwner, ownedBy, infoOf, equipOf]);
+
+  const setReview = (key: string, status: "Confirmed" | "Ask user" | null) => {
+    const reviews = { ...docRef.current.reviews };
+    if (status) reviews[key] = { status, at: new Date().toISOString() };
+    else delete reviews[key];
+    commit({ ...docRef.current, reviews });
+  };
+
+  const selectRec = (r: Rec | null) => {
+    setSelRec(r?.key ?? null);
+    if (!r) return;
+    setSelSym(r.target?.kind === "sym" ? r.target.id : null);
+    setSelLabel(r.target?.kind === "label" ? r.target.id : null);
+    setSelEquip(r.target?.kind === "equip" ? r.target.id : null);
+    if (r.box) focusBox(r.box, r.target?.kind === "equip" ? 40 : 80);
+  };
+
   const s = view.scale;
-  const cursor = tool === "pan" || spaceDown ? "grab" : tool === "new" || tool === "box" ? "crosshair" : "default";
+  const cursor =tool === "pan" || spaceDown ? "grab" : tool === "new" || tool === "box" ? "crosshair" : "default";
   const sym = doc.symbols.find((x) => x.id === selSym) ?? null;
 
   /** 캔버스 위치로 이동 (박스 주변 여유 포함) */
@@ -993,332 +1062,16 @@ export default function Editor() {
       { x: b.x + b.w + pad, y: b.y + b.h + pad },
     ]);
 
-  /** 오른쪽 패널: 선택 파이프라인의 children 상세 */
-  const detailPanel = (p: Pipeline) => {
-    const pm = membersOf.get(p.id);
-    const owned = ownedBy(p.id);
-    const shared = (pm?.members ?? []).filter((m) => owner.get(m.symbol.id)?.pipeId !== p.id);
-    const comps = owned.filter((m) => m.symbol.category !== "instrument");
-    const insts = owned.filter((m) => m.symbol.category === "instrument");
-    const info = infoOf.get(p.id);
-    const eqs = equipOf.get(p.id) ?? [];
-    const hoverProps = (kind: "sym" | "label" | "equip", id: string) => ({
-      onMouseEnter: () => setHoverItem({ kind, id }),
-      onMouseLeave: () => setHoverItem(null),
-    });
-
-    const symCard = ({ symbol: m, relation }: (typeof owned)[number], i: number) => (
-      <div
-        key={m.id}
-        className={`child-card ${m.id === selSym ? "sel" : ""}`}
-        {...hoverProps("sym", m.id)}
-        onClick={() => {
-          setSelSym(m.id);
-          focusBox(m);
-        }}
-      >
-        <span className="seq">{i + 1}</span>
-        <div className="child-main">
-          <div className="child-title">
-            {m.tag || <span className="muted">(태그 없음)</span>}
-            <span className={`rel ${relation}`}>{REL_LABEL[relation]}</span>
-          </div>
-          <div className="child-sub">
-            <span className={`cat ${m.category}`}>{CATEGORY_LABEL[m.category]}</span> {m.type}
-          </div>
-        </div>
-        <button
-          className="icon danger"
-          title="이 파이프라인에서 제외"
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleMember(p.id, m.id, false);
-          }}
-        >
-          ✕
-        </button>
-      </div>
-    );
-
-    const section = (key: string, icon: string, title: string, count: number, body: React.ReactNode, extra?: React.ReactNode) => (
-      <section className="child-sec" key={key}>
-        <div className="child-sec-head">
-          <span className="sec-icon">{icon}</span>
-          <span className="sec-title">{title}</span>
-          <span className="sec-count">{count}</span>
-          {extra}
-        </div>
-        {body}
-      </section>
-    );
-
-    return (
-      <>
-        <div className="detail-head" style={{ borderColor: p.color }}>
-          <div className="detail-title">
-            <i className="swatch" style={{ background: p.color }} />
-            <span>{p.name}</span>
-            <button
-              className={`badge ${p.status}`}
-              title="후보 ↔ 확정"
-              onClick={() => updatePipe(p.id, (x) => ({ ...x, status: x.status === "candidate" ? "confirmed" : "candidate" }))}
-            >
-              {p.status === "candidate" ? "후보" : "확정"}
-            </button>
-          </div>
-          {info?.service && <div className="detail-service">{info.service}</div>}
-          <div className="detail-stats">
-            <span>
-              <b>{eqs.length}</b> 장비
-            </span>
-            <span>
-              <b>{comps.length}</b> 컴포넌트
-            </span>
-            <span>
-              <b>{insts.length}</b> 계기
-            </span>
-            <span>
-              <b>{info?.lineNumbers.length ?? 0}</b> 라인번호
-            </span>
-            <span className="muted">
-              {Math.round(polyLength(p.points))}px · {p.points.length}점
-            </span>
-          </div>
-          <div className="row">
-            <button onClick={() => trim(p.id, "start")} title="시작 끝을 한 구간 되돌리기">
-              시작 −
-            </button>
-            <button onClick={() => trim(p.id, "end")} title="끝을 한 구간 되돌리기">
-              끝 −
-            </button>
-            <button onClick={splitAtVertex} disabled={selVertex === null || selVertex <= 0 || selVertex >= p.points.length - 1}>
-              점에서 분할
-            </button>
-            <button onClick={deleteVertex} disabled={selVertex === null || p.points.length <= 2}>
-              점 삭제
-            </button>
-            <button onClick={() => focus(p.points)}>전체 보기</button>
-          </div>
-        </div>
-
-        <div className="detail-body">
-          {section(
-            "chem",
-            "🧪",
-            "유체 (Chemical)",
-            info?.service || info?.fluidNames.length ? 1 : 0,
-            info && (info.service || info.fluidNames.length || info.connectors.length) ? (
-              <div className="child-card static chem-card">
-                <div className="child-main">
-                  <div className="child-title big">{info.service ?? <span className="muted">(서비스명 없음)</span>}</div>
-                  <dl className="kv">
-                    {info.fluidNames.length > 0 && (
-                      <>
-                        <dt>유체</dt>
-                        <dd>
-                          {info.fluidCodes.map((c, i) => (
-                            <span key={c} className="chip">
-                              {c} · {info.fluidNames[i]}
-                            </span>
-                          ))}
-                        </dd>
-                      </>
-                    )}
-                    {info.sizes.length > 0 && (
-                      <>
-                        <dt>사이즈</dt>
-                        <dd>{info.sizes.join(", ")}</dd>
-                      </>
-                    )}
-                    {info.specs.length > 0 && (
-                      <>
-                        <dt>배관 등급</dt>
-                        <dd>{info.specs.join(", ")}</dd>
-                      </>
-                    )}
-                    {info.insulations.length > 0 && (
-                      <>
-                        <dt>보온</dt>
-                        <dd>{info.lineNumbers.map((l) => `${l.insulation} (${l.insulationName})`).filter((v, i, a) => a.indexOf(v) === i).join(", ")}</dd>
-                      </>
-                    )}
-                    {info.connectors.map((c, i) => (
-                      <span key={i} style={{ display: "contents" }}>
-                        <dt>{c.fromTo?.startsWith("FROM") ? "출발" : c.fromTo?.startsWith("TO") ? "도착" : "커넥터"}</dt>
-                        <dd>
-                          {c.fromTo || c.service} {c.ref && <span className="muted">({c.ref})</span>}
-                        </dd>
-                      </span>
-                    ))}
-                  </dl>
-                </div>
-              </div>
-            ) : (
-              <div className="empty">근처에 라인 번호/커넥터가 없어 유체 정보를 알 수 없습니다</div>
-            ),
-          )}
-
-          {section(
-            "equip",
-            "🏭",
-            "장비 (Equipment)",
-            eqs.length,
-            eqs.length ? (
-              eqs.map((c) => (
-                <div
-                  key={c.equipment.id}
-                  className={`child-card equip-child ${c.equipment.id === selEquip ? "sel" : ""}`}
-                  {...hoverProps("equip", c.equipment.id)}
-                  onClick={() => {
-                    setSelEquip(c.equipment.id);
-                    focusBox(c.equipment, 40);
-                  }}
-                >
-                  <div className="child-main">
-                    <div className="child-title">
-                      {c.equipment.tag}
-                      <span className="child-sub inline">{c.equipment.name}</span>
-                    </div>
-                    <div className="nozzle-row">
-                      노즐{" "}
-                      {c.nozzles.length ? c.nozzles.map((n) => <span key={n} className="chip nozzle">{n}</span>) : <span className="muted">외곽 접촉</span>}
-                    </div>
-                    {c.equipment.specs.length > 0 && (
-                      <dl className="kv small">
-                        {c.equipment.specs.map((sp) => (
-                          <span key={sp.key} style={{ display: "contents" }}>
-                            <dt>{sp.key}</dt>
-                            <dd>{sp.value}</dd>
-                          </span>
-                        ))}
-                      </dl>
-                    )}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="empty">연결된 장비 없음</div>
-            ),
-          )}
-
-          {section(
-            "ln",
-            "🏷",
-            "라인 번호",
-            (info?.lineNumbers.length ?? 0) + (info?.unparsed.length ?? 0),
-            <>
-              {info?.lineNumbers.map((ln) => (
-                <div
-                  key={ln.labelId}
-                  className={`child-card ${ln.labelId === selLabel ? "sel" : ""}`}
-                  {...hoverProps("label", ln.labelId)}
-                  onClick={() => {
-                    setSelLabel(ln.labelId);
-                    const l = doc.labels.find((x) => x.id === ln.labelId);
-                    if (l) focusBox(l, 80);
-                  }}
-                >
-                  <div className="child-main">
-                    <div className="child-title mono big-mono">{ln.text}</div>
-                    <div className="ln-grid">
-                      <span>유체</span>
-                      <b>{ln.fluidCode}</b>
-                      <span>Unit</span>
-                      <b>{ln.unit}</b>
-                      <span>Seq</span>
-                      <b>{ln.sequence}</b>
-                      <span>Spec</span>
-                      <b>{ln.spec}</b>
-                      <span>Size</span>
-                      <b>{ln.size}</b>
-                      <span>보온</span>
-                      <b>{ln.insulation}</b>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {info?.unparsed.map((t) => (
-                <div key={t} className="child-card static">
-                  <div className="child-main">
-                    <div className="child-title mono">{t}</div>
-                    <div className="child-sub">형식이 맞지 않아 해석하지 못했습니다</div>
-                  </div>
-                </div>
-              ))}
-              {!info?.lineNumbers.length && !info?.unparsed.length && <div className="empty">라인 번호 없음</div>}
-            </>,
-            <button className="icon add" title="라인 번호·서비스명 직접 추가" onClick={() => addLineNumber(p)}>
-              ＋ 추가
-            </button>,
-          )}
-
-          {section("comp", "🔧", "파이프라인 컴포넌트", comps.length, comps.length ? comps.map(symCard) : <div className="empty">없음</div>)}
-
-          {section("inst", "📟", "인스트루먼트", insts.length, insts.length ? insts.map(symCard) : <div className="empty">없음</div>)}
-
-          {(shared.length > 0 || (pm?.excluded.length ?? 0) > 0) &&
-            section(
-              "other",
-              "↔",
-              "다른 라인 귀속 / 제외",
-              shared.length + (pm?.excluded.length ?? 0),
-              <>
-                {shared.map(({ symbol: m }) => {
-                  const o = doc.pipelines.find((x) => x.id === owner.get(m.id)?.pipeId);
-                  return (
-                    <div key={m.id} className="child-card faded" {...hoverProps("sym", m.id)} onClick={() => focusBox(m)}>
-                      <div className="child-main">
-                        <div className="child-title">{m.tag || m.type || m.id}</div>
-                        <div className="child-sub">
-                          → <b style={{ color: o?.color }}>{o?.name}</b> 에 귀속
-                        </div>
-                      </div>
-                      <button
-                        className="icon"
-                        title="이 라인으로 가져오기"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleMember(p.id, m.id, true);
-                        }}
-                      >
-                        ⇦ 가져오기
-                      </button>
-                    </div>
-                  );
-                })}
-                {pm?.excluded.map((m) => (
-                  <div key={m.id} className="child-card faded excluded" {...hoverProps("sym", m.id)} onClick={() => focusBox(m)}>
-                    <div className="child-main">
-                      <div className="child-title">{m.tag || m.type || m.id}</div>
-                      <div className="child-sub">수동 제외됨</div>
-                    </div>
-                    <button
-                      className="icon"
-                      title="다시 포함"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleMember(p.id, m.id, true);
-                      }}
-                    >
-                      ＋ 복원
-                    </button>
-                  </div>
-                ))}
-              </>,
-            )}
-        </div>
-      </>
-    );
-  };
-
   /** 오른쪽 패널: 선택 없음 → 전체 파이프라인 요약 */
   const overviewPanel = () => (
     <>
       <div className="detail-head">
         <div className="detail-title">
-          <span>파이프라인 개요</span>
+          <span>Connectivity 개요</span>
         </div>
-        <div className="muted">파이프라인을 선택하면 하위 요소(children)가 여기에 표시됩니다.</div>
+        <div className="muted">
+          {doc.drawing.no ? `${doc.drawing.no} · ${doc.drawing.title ?? ""}` : "도면 정보 없음"} — 파이프라인을 선택하면 HAZOP 2.2 분류(A–F)가 표시됩니다.
+        </div>
       </div>
       <div className="detail-body">
         {doc.pipelines.map((p) => {
@@ -1326,6 +1079,18 @@ export default function Editor() {
           const inst = owned.filter((m) => m.symbol.category === "instrument").length;
           const info = infoOf.get(p.id);
           const eqs = equipOf.get(p.id) ?? [];
+          const rv = buildReview({
+            pipe: p,
+            owned,
+            allSymbols: doc.symbols,
+            shared: [],
+            info: info!,
+            labels: doc.labels.filter((l) => labelOwner.get(l.id) === p.id),
+            eqs,
+            drawing: doc.drawing,
+            reviews: doc.reviews,
+          });
+          const pass = rv.checks.filter((k) => k.ok).length;
           return (
             <div
               key={p.id}
@@ -1342,18 +1107,26 @@ export default function Editor() {
                   {p.name} <span className={`badge ${p.status}`}>{p.status === "candidate" ? "후보" : "확정"}</span>
                 </div>
                 {info?.service && <div className="child-sub strong">{info.service}</div>}
-                <div className="child-sub">
-                  {eqs.map((c) => `${c.equipment.tag}${c.nozzles.length ? `(${c.nozzles.join(",")})` : ""}`).join(" · ") || "장비 없음"}
+                <div className="ov-edge">
+                  <span>{endText(rv.ends.from)}</span>
+                  <b>{rv.ends.directionKnown ? "→" : "↔"}</b>
+                  <span>{endText(rv.ends.to)}</span>
                 </div>
                 <div className="detail-stats">
+                  <span>
+                    <b>{eqs.length}</b> 장비
+                  </span>
                   <span>
                     <b>{owned.length - inst}</b> 컴포넌트
                   </span>
                   <span>
-                    <b>{inst}</b> 계기
+                    <b>{rv.components.loops.length}</b> 루프
                   </span>
                   <span>
-                    <b>{info?.lineNumbers.length ?? 0}</b> 라인번호
+                    <b>{inst}</b> 계기
+                  </span>
+                  <span className="muted">
+                    <b>{pass}</b>/{rv.checks.length} criteria
                   </span>
                 </div>
               </div>
@@ -2208,7 +1981,51 @@ export default function Editor() {
       </main>
 
       {/* ── 오른쪽: 선택 파이프라인의 children ── */}
-      <aside className="panel right detail">{pipe ? detailPanel(pipe) : overviewPanel()}</aside>
+      <aside className="panel right detail">
+        {pipe && pipeReview ? (
+          <ReviewPanel
+            pipe={pipe}
+            review={pipeReview}
+            info={infoOf.get(pipe.id)!}
+            drawing={doc.drawing}
+            shared={(membersOf.get(pipe.id)?.members ?? [])
+              .filter((m) => owner.get(m.symbol.id)?.pipeId !== pipe.id)
+              .map((m) => {
+                const o = doc.pipelines.find((x) => x.id === owner.get(m.symbol.id)?.pipeId);
+                return { symbol: m.symbol, ownerName: o?.name ?? "?", ownerColor: o?.color ?? "#999" };
+              })}
+            excluded={membersOf.get(pipe.id)?.excluded ?? []}
+            selRec={selRec}
+            onSelectRec={selectRec}
+            onHover={setHoverItem}
+            onFocusBox={(b) => focusBox(b)}
+            onSetReview={setReview}
+            onToggleMember={(id, member) => toggleMember(pipe.id, id, member)}
+            onSpecifyChemicals={(ids) => updatePipe(pipe.id, (x) => ({ ...x, chemicals: ids }))}
+            onSetStatus={(st) => updatePipe(pipe.id, (x) => ({ ...x, status: st }))}
+            onAddLabel={() => addLineNumber(pipe)}
+            actions={
+              <div className="row">
+                <button onClick={() => trim(pipe.id, "start")} title="시작 끝을 한 구간 되돌리기">
+                  시작 −
+                </button>
+                <button onClick={() => trim(pipe.id, "end")} title="끝을 한 구간 되돌리기">
+                  끝 −
+                </button>
+                <button onClick={splitAtVertex} disabled={selVertex === null || selVertex <= 0 || selVertex >= pipe.points.length - 1}>
+                  점에서 분할
+                </button>
+                <button onClick={deleteVertex} disabled={selVertex === null || pipe.points.length <= 2}>
+                  점 삭제
+                </button>
+                <button onClick={() => focus(pipe.points)}>전체 보기</button>
+              </div>
+            }
+          />
+        ) : (
+          overviewPanel()
+        )}
+      </aside>
     </div>
   );
 }

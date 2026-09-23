@@ -20,6 +20,8 @@ export interface Pipeline {
   /** 자동 판정을 덮어쓰는 수동 포함/제외 심볼 id */
   include?: string[];
   exclude?: string[];
+  /** D Chemicals: 엔지니어가 지정한 화학물질 id */
+  chemicals?: string[];
 }
 
 export type SymbolCategory = "valve" | "fitting" | "instrument" | "other";
@@ -86,6 +88,10 @@ export interface LineDoc {
   symbols?: PidSymbol[];
   labels?: LineLabel[];
   equipment?: Equipment[];
+  /** 도면 정보 (A Documents) */
+  drawing?: { no?: string; title?: string; unit?: string; register?: { file: string; dwg_no: string; title: string }[] };
+  /** 레코드별 검토 상태 (key → Confirmed / Ask user) */
+  reviews?: Record<string, { status: "Confirmed" | "Ask user"; at: string }>;
   updatedAt?: string;
 }
 
