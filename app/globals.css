@@ -160,6 +160,293 @@ button.primary:hover:not(:disabled) {
   border-left: 1px solid #e3e5e8;
   gap: 8px;
 }
+
+/* ── 오른쪽: 선택 파이프라인 children 상세 ── */
+.panel.right.detail {
+  width: 380px;
+  padding: 0;
+  gap: 0;
+  font-size: 13px;
+  background: #fafbfc;
+}
+.detail-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px 12px;
+  background: #fff;
+  border-bottom: 1px solid #e3e5e8;
+  border-top: 4px solid transparent;
+}
+.detail-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: 700;
+}
+.detail-title .badge {
+  margin-left: auto;
+  font-size: 12px;
+  padding: 2px 10px;
+}
+.swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.detail-service {
+  font-size: 15px;
+  font-weight: 700;
+  color: #7a3e00;
+}
+.detail-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: #555;
+  font-size: 12px;
+}
+.detail-stats b {
+  font-size: 15px;
+  color: #111;
+  margin-right: 2px;
+}
+.detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px 24px;
+}
+.child-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.child-sec-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e6e8eb;
+}
+.sec-icon {
+  font-size: 15px;
+}
+.sec-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #222;
+}
+.sec-count {
+  min-width: 22px;
+  padding: 0 7px;
+  border-radius: 10px;
+  background: #e8ebef;
+  color: #333;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+.child-sec-head .icon.add {
+  margin-left: auto;
+  font-size: 12px;
+  color: #0070f3;
+}
+.child-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e3e5e8;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.child-card:hover {
+  border-color: #0070f3;
+  box-shadow: 0 1px 6px rgba(0, 112, 243, 0.15);
+}
+.child-card.sel {
+  border-color: #0070f3;
+  background: #f0f6ff;
+}
+.child-card.static {
+  cursor: default;
+}
+.child-card.static:hover {
+  border-color: #e3e5e8;
+  box-shadow: none;
+}
+.child-card.faded {
+  opacity: 0.75;
+  background: #f7f8fa;
+}
+.child-card.excluded .child-title {
+  text-decoration: line-through;
+}
+.child-card.overview {
+  border-left: 5px solid;
+}
+.child-card .seq {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #eef1f4;
+  color: #555;
+  font-size: 11px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+.child-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.child-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111;
+}
+.child-title.big {
+  font-size: 16px;
+  color: #7a3e00;
+}
+.child-title.big-mono {
+  font-size: 13px;
+  word-break: break-all;
+}
+.child-title .rel {
+  font-size: 11px;
+  font-weight: 600;
+}
+.child-sub {
+  font-size: 12px;
+  color: #555;
+}
+.child-sub.inline {
+  font-weight: 500;
+}
+.child-sub.strong {
+  font-weight: 700;
+  color: #7a3e00;
+}
+.cat {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 6px;
+  border-radius: 4px;
+  margin-right: 4px;
+}
+.cat.valve {
+  background: #fdecec;
+  color: #b42318;
+}
+.cat.fitting {
+  background: #e9f7ef;
+  color: #1f7a45;
+}
+.cat.instrument {
+  background: #eaf2ff;
+  color: #1d4ed8;
+}
+.cat.other {
+  background: #f1f1f1;
+  color: #555;
+}
+dl.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+dl.kv dt {
+  color: #666;
+  white-space: nowrap;
+}
+dl.kv dd {
+  margin: 0;
+  color: #111;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+dl.kv.small {
+  font-size: 11.5px;
+  gap: 2px 10px;
+  padding-top: 6px;
+  border-top: 1px dashed #e3e5e8;
+}
+.chem-card {
+  background: #fffaf3;
+  border-color: #f5dfc0;
+}
+.chip {
+  font-size: 11px;
+}
+.chip.nozzle {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 1px 8px;
+  background: #d9f2f7;
+  color: #0e7490;
+}
+.nozzle-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #555;
+}
+.equip-child {
+  border-left: 4px solid #0e7490;
+}
+.ln-grid {
+  display: grid;
+  grid-template-columns: repeat(6, auto);
+  gap: 2px 6px;
+  font-size: 11.5px;
+  color: #666;
+  align-items: baseline;
+}
+.ln-grid b {
+  color: #111;
+  font-family: ui-monospace, Consolas, monospace;
+}
+.empty {
+  padding: 10px 12px;
+  border: 1px dashed #d8dce1;
+  border-radius: 8px;
+  color: #888;
+  font-size: 12px;
+  text-align: center;
+}
+.hover-pulse {
+  animation: pulse 0.9s ease-in-out infinite alternate;
+}
+@keyframes pulse {
+  from {
+    stroke-opacity: 1;
+  }
+  to {
+    stroke-opacity: 0.35;
+  }
+}
 .panel section.grow {
   flex: 1;
   min-height: 200px;
@@ -206,7 +493,7 @@ button.icon.danger:hover {
   flex-direction: column;
   gap: 4px;
   overflow-y: auto;
-  max-height: 42vh;
+  max-height: 60vh;
 }
 .pipe-row {
   display: flex;
