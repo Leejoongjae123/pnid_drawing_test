@@ -1,0 +1,11 @@
+node_modules
+.next
+out
+next-env.d.ts
+*.tsbuildinfo
+.env*.local
+.env.production
+
+# 로컬 서버 전용 (프론트엔드 저장소에는 포함하지 않음)
+scripts/
+data/

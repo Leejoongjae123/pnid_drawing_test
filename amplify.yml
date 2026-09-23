@@ -1,0 +1,20 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - nvm use 20 || true
+        - npm ci
+    build:
+      commands:
+        # 정적 배포 모드: public/drawings 의 도면·시드 데이터를 사용, 저장은 브라우저(localStorage)
+        - echo "NEXT_PUBLIC_STATIC_MODE=1" >> .env.production
+        - npm run build
+  artifacts:
+    baseDirectory: .next
+    files:
+      - "**/*"
+  cache:
+    paths:
+      - node_modules/**/*
+      - .next/cache/**/*
